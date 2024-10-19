@@ -46,12 +46,22 @@ func client_inout() {
 	for {
 		select {
 		case cli := <-entering:
+			clientType := "Usuário"
+            if cli.bot {
+                clientType = "Bot"
+            }
+
 			clients[cli.nickname] = cli
-			broadcast_messages <- message{"", "", fmt.Sprintf("Usuário @%s acabou de entrar!", cli.nickname)}
+			broadcast_messages <- message{"", "", fmt.Sprintf("%s @%s acabou de entrar!", clientType, cli.nickname)}
 		case cli := <-leaving:
+			clientType := "Usuário"
+            if cli.bot {
+                clientType = "Bot"
+            }
+
 			delete(clients, cli.nickname)
 			close(cli.ch)
-			broadcast_messages <- message{"", "", fmt.Sprintf("Usuário @%s saiu", cli.nickname)}
+			broadcast_messages <- message{"", "", fmt.Sprintf("%s @%s saiu", clientType, cli.nickname)}
 		}
 	}
 }
@@ -168,31 +178,36 @@ func clientWriter(conn net.Conn, ch <-chan string) {
 }
 
 // função que gerencia a conexão com o client
-func handleClientConn(conn net.Conn) {
+func handleClientConn(conn net.Conn, isBot bool) {
 	defer conn.Close() // somente vai ser chamado quando a função terminar
 
 	ch := make(chan string)   // criação do canal de mensagem
 	go clientWriter(conn, ch) // atribui ao canal de mensagens o console do cliente
 
-	ch <- "Digite seu nickname"
-
+	var nickname string = ""
+	
 	input := bufio.NewScanner(conn)
 
-	// definição do nickname ao entrar
-	var nickname string
-	for input.Scan() {
-		nickname = strings.TrimSpace(input.Text())
+	if isBot {
+		nickname = "Bot"
+	} else {
+		// definição do nickname ao usuario entrar
+		ch <- "Digite seu nickname"
 
-		if _, exists := clients[nickname]; exists {
-			ch <- fmt.Sprintf("O apelido @%s já está em uso", nickname)
-		} else if nickname == "" {
-			ch <- "Nickname inválido"
-		} else {
-			break
+		for input.Scan() {
+			nickname = strings.TrimSpace(input.Text())
+
+			if _, exists := clients[nickname]; exists {
+				ch <- fmt.Sprintf("O apelido @%s já está em uso", nickname)
+			} else if nickname == "" {
+				ch <- "Nickname inválido"
+			} else {
+				break
+			}
 		}
 	}
 
-	cli := client{nickname: nickname, ch: ch, bot: false} // cria a struct de client
+	cli := client{nickname: nickname, ch: ch, bot: isBot} // cria a struct de client
 	entering <- &cli                                      // manda para o canal de entrar o client
 
 	// loop principal do client
@@ -220,28 +235,46 @@ func handleClientConn(conn net.Conn) {
 
 // função principal
 func main() {
-	fmt.Println("Iniciando servidor...")
+    fmt.Println("Iniciando servidores...")
 
-	// listener para clientes
-	listener, err := net.Listen("tcp", "localhost:3000")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("Servidor iniciado na porta 3000")
-
-	// inicio das gorrotinas
 	go messages()
 	go client_inout()
 	go commandsManeger()
 
-	// loop principal
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Print(err)
-			continue
-		}
-		go handleClientConn(conn)
-	}
+    // Listener para clientes
+    go func() {
+        listenerClient, err := net.Listen("tcp", "localhost:3000")
+        if err != nil {
+            log.Fatal(err)
+        }
+        log.Printf("Servidor iniciado na porta 3000")
+        for {
+            conn, err := listenerClient.Accept()
+            if err != nil {
+                log.Print(err)
+                continue
+            }
+            go handleClientConn(conn, false)
+        }
+    }()
+
+    // Listener para bots
+    go func() {
+        listenerBot, err := net.Listen("tcp", "localhost:3001")
+        if err != nil {
+            log.Fatal(err)
+        }
+        log.Printf("Servidor iniciado na porta 3001")
+        for {
+            conn, err := listenerBot.Accept()
+            if err != nil {
+                log.Print(err)
+                continue
+            }
+            go handleClientConn(conn, true)
+        }
+    }()
+
+    //mantem o programa rodando
+    select {}
 }
