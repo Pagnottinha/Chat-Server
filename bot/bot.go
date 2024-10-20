@@ -3,10 +3,8 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"log"
 	"net"
-	"os"
 	"strings"
 )
 
@@ -26,26 +24,24 @@ func main() {
 	defer conn.Close() // somente vai ser chamado quando a função terminar
 
 	fmt.Println("Bot conectado ao servidor!")
-
 	done := make(chan struct{})
 
 	go func() {
-		io.Copy(os.Stdout, conn) // tudo que digitar vai mandar pra conexão
-		log.Println("Conexão com o servidor encerrada.")
-		done <- struct{}{}
-	}()
-
-	go func() {
-		scanner := bufio.NewScanner(conn) 
+		scanner := bufio.NewScanner(conn)
 		for scanner.Scan() {
-			message := strings.Fields(scanner.Text())	
-			comand := "\\msg " + message[0] + " " + reverse(message[4]) + "\n"
-        	io.WriteString(conn, comand)
+			message := strings.Fields(scanner.Text())
+
+			text := "Mensagem de " + message[0] + ": " + message[4]
+			fmt.Println(text)
+
+			comand := "\\msg " + message[0] + " " + reverse(message[4])
+			fmt.Fprintln(conn, comand)
 		}
 		if err := scanner.Err(); err != nil {
-			log.Println("Erro ao ler entrada: %v", err)
+			log.Printf("Erro ao ler entrada: %v", err)
 		}
 		conn.Close()
+		done <- struct{}{}
 	}()
 
 	<-done

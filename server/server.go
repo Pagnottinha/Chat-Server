@@ -47,17 +47,17 @@ func client_inout() {
 		select {
 		case cli := <-entering:
 			clientType := "Usuário"
-            if cli.bot {
-                clientType = "Bot"
-            }
+			if cli.bot {
+				clientType = "Bot"
+			}
 
 			clients[cli.nickname] = cli
 			broadcast_messages <- message{"", "", fmt.Sprintf("%s @%s acabou de entrar!", clientType, cli.nickname)}
 		case cli := <-leaving:
 			clientType := "Usuário"
-            if cli.bot {
-                clientType = "Bot"
-            }
+			if cli.bot {
+				clientType = "Bot"
+			}
 
 			delete(clients, cli.nickname)
 			close(cli.ch)
@@ -185,11 +185,21 @@ func handleClientConn(conn net.Conn, isBot bool) {
 	go clientWriter(conn, ch) // atribui ao canal de mensagens o console do cliente
 
 	var nickname string = ""
-	
 	input := bufio.NewScanner(conn)
 
 	if isBot {
 		nickname = "Bot"
+		count := 0
+
+		for _, cli := range clients {
+			if strings.Contains(cli.nickname, nickname) {
+				count++
+			}
+		}
+
+		if count >= 1 {
+			nickname += fmt.Sprintf("%d", count)
+		}
 	} else {
 		// definição do nickname ao usuario entrar
 		ch <- "Digite seu nickname"
@@ -201,6 +211,8 @@ func handleClientConn(conn net.Conn, isBot bool) {
 				ch <- fmt.Sprintf("O apelido @%s já está em uso", nickname)
 			} else if nickname == "" {
 				ch <- "Nickname inválido"
+			} else if strings.Contains(strings.ToLower(nickname), strings.ToLower("Bot")) {
+				ch <- "Nickname inválido, não deve conter 'bot'."
 			} else {
 				break
 			}
@@ -235,46 +247,46 @@ func handleClientConn(conn net.Conn, isBot bool) {
 
 // função principal
 func main() {
-    fmt.Println("Iniciando servidores...")
+	fmt.Println("Iniciando servidores...")
 
 	go messages()
 	go client_inout()
 	go commandsManeger()
 
-    // Listener para clientes
-    go func() {
-        listenerClient, err := net.Listen("tcp", "localhost:3000")
-        if err != nil {
-            log.Fatal(err)
-        }
-        log.Printf("Servidor iniciado na porta 3000")
-        for {
-            conn, err := listenerClient.Accept()
-            if err != nil {
-                log.Print(err)
-                continue
-            }
-            go handleClientConn(conn, false)
-        }
-    }()
+	// Listener para clientes
+	go func() {
+		listenerClient, err := net.Listen("tcp", "localhost:3000")
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("Servidor iniciado na porta 3000")
+		for {
+			conn, err := listenerClient.Accept()
+			if err != nil {
+				log.Print(err)
+				continue
+			}
+			go handleClientConn(conn, false)
+		}
+	}()
 
-    // Listener para bots
-    go func() {
-        listenerBot, err := net.Listen("tcp", "localhost:3001")
-        if err != nil {
-            log.Fatal(err)
-        }
-        log.Printf("Servidor iniciado na porta 3001")
-        for {
-            conn, err := listenerBot.Accept()
-            if err != nil {
-                log.Print(err)
-                continue
-            }
-            go handleClientConn(conn, true)
-        }
-    }()
+	// Listener para bots
+	go func() {
+		listenerBot, err := net.Listen("tcp", "localhost:3001")
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("Servidor iniciado na porta 3001")
+		for {
+			conn, err := listenerBot.Accept()
+			if err != nil {
+				log.Print(err)
+				continue
+			}
+			go handleClientConn(conn, true)
+		}
+	}()
 
-    //mantem o programa rodando
-    select {}
+	//mantem o programa rodando
+	select {}
 }
